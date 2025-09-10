@@ -1,0 +1,55 @@
+name: Publicação automática
+on:  
+  # nosso script será executado sempre quando houver push e pull request nas branches destacadas abaixo
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+jobs:
+  build:
+    # sistema operacional da máquina que o Github irá disponibilizar para rodar o nosso script 
+    runs-on: ubuntu-latest
+
+    # aqui é iniciado o passo a passo para realizar o processo de publicação
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Cria um arquivo temporário para a chave privada e altera a permissão do arquivo para que só o dono possa ler e escrever (necessário para chaves)
+        run: |
+               echo "${{ secrets.KEY }}" > /tmp/private_key
+               chmod 600 /tmp/private_key
+
+      - name: Criando a pasta da aplicação e acertando diretório... 
+        # StrictHostKeyChecking: desativar prompt 'fingerprint'
+        # UserKnownHostsFile: para não salvar a chave
+        run: |
+               ssh -i /tmp/private_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.HOST }} \
+               sudo mkdir -p /home/ubuntu/dev
+
+      - name: Ajustar permissões no servidor de Produção
+        run: |
+          ssh -i /tmp/private_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.HOST }} "sudo chown -R ubuntu:ubuntu /home/ubuntu/dev && sudo chmod -R 755 /home/ubuntu/dev"
+                     
+      - name: Transferindo os arquivos da aplicação
+        run: |
+               scp -i /tmp/private_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ${{ github.workspace }}/* ubuntu@${{ secrets.HOST }}:/home/ubuntu/dev
+
+
+      - name: Reiniciando o serviço da aplicação
+        run: |
+               ssh -i /tmp/private_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.HOST }} \
+               sudo systemctl restart app.service              
+
+      - name: Limpa o arquivo de chave privada após uso
+        run: |
+           rm /tmp/private_key
+
+      - name: Enviar mensagem para o Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          AUTHOR: ${{ github.actor }}
+        run: |
+          curl -H "Content-Type: application/json" \
+                 -X POST \
+                 -d "{\"content\": \"Deploy realizado com sucesso por **${AUTHOR}**!\"}" \
+                 $DISCORD_WEBHOOK      
