@@ -10,7 +10,7 @@ jobs:
     # sistema operacional da máquina que o Github irá disponibilizar para rodar o nosso script 
     runs-on: ubuntu-latest
     env:
-      APP_PATH: /home/ubuntu/devr
+      APP_PATH: /home/ubuntu/dev
       APP_SERVICE_NAME: app.service
       BACKUP_DIR: /home/ubuntu/backups
     # aqui é iniciado o passo a passo para realizar o processo de publicação
