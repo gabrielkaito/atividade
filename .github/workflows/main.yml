@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       APP_PATH: /home/ubuntu/devr
-      APP_SERVICE_NAME: aoo.service
+      APP_SERVICE_NAME: app.service
       BACKUP_DIR: /home/ubuntu/backups
     # aqui é iniciado o passo a passo para realizar o processo de publicação
     steps:
