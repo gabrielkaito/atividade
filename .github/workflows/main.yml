@@ -36,7 +36,7 @@ jobs:
       - name: Preparar diretórios no servidor
         run: |
           ssh -i /tmp/private_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.HOST }} \
-          "sudo mkdir -p $APP_PATH $BACKUP_DIR && sudo chown -R ubuntu:ubuntu $APP_PATH $BACKUP_DIR && sudo chmod -R 755 $APP_PATH
+          "sudo mkdir -p $APP_PATH $BACKUP_DIR && sudo chown -R ubuntu:ubuntu $APP_PATH $BACKUP_DIR && sudo chmod -R 755 $APP_PATH \
           
       - name: 🔁 Backup da aplicação atual antes do deploy
         run: |
