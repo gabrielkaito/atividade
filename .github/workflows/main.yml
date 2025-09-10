@@ -29,22 +29,39 @@ jobs:
       - name: Ajustar permissões no servidor de Produção
         run: |
           ssh -i /tmp/private_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.HOST }} "sudo chown -R ubuntu:ubuntu /home/ubuntu/dev && sudo chmod -R 755 /home/ubuntu/dev"
+
+      - name: 🔁 Backup da aplicação atual antes do deploy
+        run: |
+          ssh -i /tmp/private_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.HOST }} '
+            set -e
+            BACKUP_DIR="/home/ubuntu/backups"
+            APP_DIR="/home/ubuntu/dev"
+            TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+            BACKUP_FILE="$BACKUP_DIR/app-backup-$TIMESTAMP.zip"
+            mkdir -p "$BACKUP_DIR"
+            if [ "$(ls -A $APP_DIR)" ]; then
+              zip -r "$BACKUP_FILE" "$APP_DIR"
+              echo "Backup criado em: $BACKUP_FILE"
+            else
+              echo "Diretório da aplicação está vazio, nenhum backup necessário."
+            fi
+          '
                      
-      - name: Transferindo os arquivos da aplicação
+      - name: 📦 Transferindo os arquivos da aplicação
         run: |
                scp -i /tmp/private_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ${{ github.workspace }}/* ubuntu@${{ secrets.HOST }}:/home/ubuntu/dev
 
 
-      - name: Reiniciando o serviço da aplicação
+      - name: 🔄 Reiniciando o serviço da aplicação
         run: |
                ssh -i /tmp/private_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.HOST }} \
                sudo systemctl restart app.service              
 
-      - name: Limpa o arquivo de chave privada após uso
+      - name: 🧹 Limpa o arquivo de chave privada após uso
         run: |
            rm /tmp/private_key
 
-      - name: Enviar mensagem para o Discord
+      - name: 📢 Enviar mensagem para o Discord
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
           AUTHOR: ${{ github.actor }}
