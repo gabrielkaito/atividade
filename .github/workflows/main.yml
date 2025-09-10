@@ -9,7 +9,10 @@ jobs:
   build:
     # sistema operacional da máquina que o Github irá disponibilizar para rodar o nosso script 
     runs-on: ubuntu-latest
-
+    env:
+      APP_PATH: /home/ubuntu/devr
+      APP_SERVICE_NAME: aoo.service
+      BACKUP_DIR: /home/ubuntu/backups
     # aqui é iniciado o passo a passo para realizar o processo de publicação
     steps:
       - uses: actions/checkout@v3
@@ -32,20 +35,23 @@ jobs:
 
       - name: 🔁 Backup da aplicação atual antes do deploy
         run: |
-          ssh -i /tmp/private_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.HOST }} '
+          ssh -i /tmp/private_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.HOST }} "
             set -e
-            BACKUP_DIR="/home/ubuntu/backups"
-            APP_DIR="/home/ubuntu/dev"
-            TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-            BACKUP_FILE="$BACKUP_DIR/app-backup-$TIMESTAMP.zip"
-            mkdir -p "$BACKUP_DIR"
-            if [ "$(ls -A $APP_DIR)" ]; then
-              zip -r "$BACKUP_FILE" "$APP_DIR"
-              echo "Backup criado em: $BACKUP_FILE"
+            # Pula backup se diretório estiver vazio
+            if [ -d '$APP_PATH' ] && [ \"\$(ls -A '$APP_PATH' 2>/dev/null)\" ]; then
+              TS=\$(date +%Y%m%d%H%M%S)
+              FILE=\"$BACKUP_DIR/app-\$TS.tgz\"
+              # Compacta conteúdo atual
+              tar -czf \"\$FILE\" -C \"$APP_PATH\" .
+              # Guarda referência do último backup
+              echo \"\$FILE\" > \"$BACKUP_DIR/LAST_BACKUP\"
+              # Mantém só os 5 mais recentes
+              ls -1t \"$BACKUP_DIR\"/app-*.tgz 2>/dev/null | tail -n +6 | xargs -r rm -f
+              echo \"Backup criado em: \$FILE\"
             else
-              echo "Diretório da aplicação está vazio, nenhum backup necessário."
+              echo 'APP_PATH vazio - sem backup (primeiro deploy?)'
             fi
-          '
+          "
                      
       - name: 📦 Transferindo os arquivos da aplicação
         run: |
@@ -69,4 +75,32 @@ jobs:
           curl -H "Content-Type: application/json" \
                  -X POST \
                  -d "{\"content\": \"Deploy realizado com sucesso por **${AUTHOR}**!\"}" \
-                 $DISCORD_WEBHOOK      
+                 $DISCORD_WEBHOOK     
+                 
+      - name: ⚠️ Restaurar em caso de falha (rollback)
+        if: ${{ failure() }}
+        run: |
+          echo "Falha detectada. Iniciando restauração do último backup..."
+          ssh -i /tmp/private_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.HOST }} "
+            set -e
+            if [ -f \"$BACKUP_DIR/LAST_BACKUP\" ]; then
+              FILE=\$(cat \"$BACKUP_DIR/LAST_BACKUP\")
+              if [ -f \"\$FILE\" ]; then
+                echo \"Restaurando backup \$FILE para $APP_PATH...\"
+                # Limpa conteúdo atual e restaura
+                rm -rf \"$APP_PATH\"/*
+                tar -xzf \"\$FILE\" -C \"$APP_PATH\"
+                # Garante permissões pós-restauração
+                chown -R ubuntu:ubuntu \"$APP_PATH\"
+                chmod -R 755 \"$APP_PATH\"
+                # Reinicia serviço
+                sudo systemctl restart $APP_SERVICE_NAME
+                sudo systemctl status $APP_SERVICE_NAME --no-pager -l || true
+                echo \"Restauração concluída.\"
+              else
+                echo \"Arquivo de backup não encontrado: \$FILE\"
+              fi
+            else
+              echo 'Nenhum LAST_BACKUP encontrado. Nada a restaurar.'
+            fi
+          "
